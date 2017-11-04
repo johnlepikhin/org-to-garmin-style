@@ -1,0 +1,209 @@
+#!/usr/bin/perl
+
+use 5.010;
+use warnings;
+use strict;
+use Org::Parser;
+use Path::Tiny;
+use File::Slurp;
+use Carp;
+
+my $codepage = 1251;
+
+binmode STDOUT, ':utf8';
+
+my $orgp = Org::Parser->new();
+
+# parse a file
+my $doc = $orgp->parse_file( $ARGV[0] );
+
+my ( %out, %used_ids );
+
+sub getfh ($) {
+    if ( exists $out{ $_[0] } ) {
+        return $out{ $_[0] };
+    }
+
+    my $fname;
+    if ( $_[0] eq 'polygon' ) {
+        $fname = 'polygons';
+    }
+    elsif ( $_[0] eq 'line' ) {
+        $fname = 'lines';
+    }
+    elsif ( $_[0] eq 'point' ) {
+        $fname = 'points';
+    }
+    else {
+        croak "Uknown type: $_[0]";
+    }
+    open my $fh, '>:utf8', "$ARGV[1]/$fname";
+    $out{ $_[0] } = $fh;
+    return $fh;
+}
+
+my $heading;
+
+$doc->walk(
+    sub {
+        my ($el) = @_;
+        if ( $el->isa('Org::Element::Headline') ) {
+            $heading = $el;
+            my $garmin_id = $el->get_property( 'GARMIN_ID', 1 );
+            if ( defined $garmin_id ) {
+                $used_ids{$garmin_id} = 1;
+                $heading->{id} = $garmin_id;
+            }
+        }
+        elsif ( defined $heading ) {
+            if ( $el->isa('Org::Element::Link') ) {
+                my $link = $el->link();
+                if ( $link =~ /\.xpm$/ ) {
+                    if ( $link =~ /^file:(.*)/ ) {
+                        $heading->{xpm} = $1;
+                    }
+                    else {
+                        carp "Only file: links are supported for XPMs: $link";
+                    }
+                }
+            }
+        }
+    }
+);
+
+my $last_used_id = 10;
+my ( $type, $fh );
+$doc->walk(
+    sub {
+        my ($el) = @_;
+        if ( $el->isa('Org::Element::Headline') ) {
+            $type = $el->get_property( 'TYPE', 1 ) // return;
+            $fh = getfh($type);
+            my $osm_select = $el->get_property( 'OSM_SELECT', 1 ) // return;
+            my $resolution = $el->get_property( 'RESOLUTION', 1 ) // return;
+
+            my $id = $el->{id};
+            if ( !defined $id ) {
+                while ( exists $used_ids{ sprintf "0x%x", $last_used_id } ) {
+                    $last_used_id++;
+                }
+                $el->{id} = sprintf "0x%x", $last_used_id;
+                $used_ids{ $el->{id} } = 1;
+            }
+
+            if ( ref $osm_select eq 'ARRAY' ) {
+                $osm_select = ( join q{ }, @{$osm_select} );
+            }
+            print $fh "$osm_select [$el->{id} resolution $resolution]\n";
+        }
+        elsif ( $el->isa('Org::Element::Block') ) {
+            if ( $el->name() eq 'SRC' && $el->args()->[0] eq 'typ.txt' ) {
+                print $fh $el->raw_content(), "\n";
+            }
+        }
+    }
+);
+
+foreach ( values %out ) {
+    close $_;
+}
+
+my %props = %{ $doc->properties() };
+
+my $fid = $props{FAMILY_ID} // croak "Cannot get FAMILY_ID from file header";
+
+# my $pid = $props{PRODUCT_ID} // 1;
+my $version = $props{VERSION} // 1;
+write_file( "$ARGV[1]/version", "$version\n" );
+
+open $fh, ">:encoding(cp$codepage)", "$ARGV[1]/style.txt";
+print $fh <<"END"
+[_id]
+FID=$fid
+CodePage=$codepage
+[end]
+
+[_drawOrder]
+END
+  ;
+
+$doc->walk(
+    sub {
+        my ($el) = @_;
+        if ( !$el->isa('Org::Element::Headline') ) {
+            return;
+        }
+        my $order = $el->get_property( 'DRAW_ORDER', 1 ) // return;
+        my $id = $el->{id} // return;
+
+        print $fh "Type=$id,$order\n";
+    }
+);
+
+print $fh "[end]\n\n";
+
+$doc->walk(
+    sub {
+        my ($el) = @_;
+        if ( $el->isa('Org::Element::Headline') ) {
+            my $xpm_file = $el->{xpm};
+            my $title    = $el->title->as_string();
+            my $language = $el->get_property( 'LANGUAGE', 1 );
+            my $type     = $el->get_property( 'TYPE', 1 );
+
+            if ( defined $type && defined $language && defined $xpm_file ) {
+                my $id = $el->{id} // return;
+
+                my $xpm = path($xpm_file)->slurp
+                  // croak "Cannot read file: $xpm_file";
+                my $xpm_processed;
+                foreach ( split /\n/, $xpm ) {
+                    if (/^"([^"]+)/) {
+                        $xpm_processed .= "\"$1\"\n";
+                    }
+                }
+                $xpm = $xpm_processed;
+                print $fh <<"END"
+[_$type]
+Type=$id
+String1=$language,$title
+Xpm=$xpm
+[end]
+
+END
+            }
+        }
+    }
+);
+
+close $fh;
+
+open $fh, ">", "$ARGV[1]/mkgmap-args.txt";
+print $fh <<"END"
+generate-sea: land-tag=natural=background
+location-autofill: is_in,nearest
+housenumbers
+tdbfile
+show-profiles: 1
+ignore-maxspeeds
+add-pois-to-areas
+add-pois-to-lines
+link-pois-to-ways
+make-opposite-cycleways
+process-destination
+process-exits
+preserve-element-order
+net
+route
+index
+nsis
+gmapsupp
+style-file=$ARGV[1]
+unicode
+family-id=$fid
+code-page=$codepage
+END
+  ;
+
+close $fh;
+
