@@ -7,6 +7,17 @@ use Org::Parser;
 use Path::Tiny;
 use File::Slurp;
 use Carp;
+use Pod::Usage;
+use Getopt::Long;
+
+my ($org_file, $output_directory);
+
+GetOptions(q{org-file=s} => \$org_file,
+           q{output-directory=s} => \$output_directory);
+
+if (!defined $org_file || !defined $output_directory) {
+    pod2usage(-verbose => 2);
+}
 
 my $codepage = 1251;
 
@@ -15,7 +26,12 @@ binmode STDOUT, ':utf8';
 my $orgp = Org::Parser->new();
 
 # parse a file
-my $doc = $orgp->parse_file( $ARGV[0] );
+my $doc = $orgp->parse_file( $org_file );
+
+
+mkdir $output_directory;
+
+my ($org_basedir) = $org_file =~ m{(.*)/};
 
 my ( %out, %used_ids );
 
@@ -37,7 +53,7 @@ sub getfh ($) {
     else {
         croak "Uknown type: $_[0]";
     }
-    open my $fh, '>:utf8', "$ARGV[1]/$fname";
+    open my $fh, '>:utf8', "$output_directory/$fname";
     $out{ $_[0] } = $fh;
     return $fh;
 }
@@ -60,7 +76,7 @@ $doc->walk(
                 my $link = $el->link();
                 if ( $link =~ /\.xpm$/ ) {
                     if ( $link =~ /^file:(.*)/ ) {
-                        $heading->{xpm} = $1;
+                        $heading->{xpm} = "$org_basedir/$1";
                     }
                     else {
                         carp "Only file: links are supported for XPMs: $link";
@@ -114,9 +130,9 @@ my $fid = $props{FAMILY_ID} // croak "Cannot get FAMILY_ID from file header";
 
 # my $pid = $props{PRODUCT_ID} // 1;
 my $version = $props{VERSION} // 1;
-write_file( "$ARGV[1]/version", "$version\n" );
+write_file( "$output_directory/version", "$version\n" );
 
-open $fh, ">:encoding(cp$codepage)", "$ARGV[1]/style.txt";
+open $fh, ">:encoding(cp$codepage)", "$output_directory/style.txt";
 print $fh <<"END"
 [_id]
 FID=$fid
@@ -178,7 +194,7 @@ END
 
 close $fh;
 
-open $fh, ">", "$ARGV[1]/mkgmap-args.txt";
+open $fh, ">", "$output_directory/mkgmap-args.txt";
 print $fh <<"END"
 generate-sea: land-tag=natural=background
 location-autofill: is_in,nearest
@@ -198,7 +214,7 @@ route
 index
 nsis
 gmapsupp
-style-file=$ARGV[1]
+style-file=$output_directory
 unicode
 family-id=$fid
 code-page=$codepage
@@ -207,3 +223,23 @@ END
 
 close $fh;
 
+__END__
+
+=head1 NAME
+=encoding utf-8
+
+org-to-style - Emacs orgmode to mkgmap style file converter
+
+=head1 SYNOPSIS
+
+org-to-style --org-file=my-style.org --output-directory=/tmp/mkgamp-style
+
+=head1 DESCRIPTION
+
+This is an attempt to simplify developement of mkgmap style files. All
+manual workflow is done using Emacs org-mode and any graphical editor
+which support XPM (I use Gimp).
+
+For more info see:
+
+https://johnlepikhin.github.io/blog/2017/11/04/создание-своих-карт-для-gps
