@@ -217,6 +217,7 @@ gmapsupp
 style-file=$output_directory
 unicode
 family-id=$fid
+product-id=1
 code-page=$codepage
 END
   ;
@@ -232,7 +233,7 @@ org-to-style - Emacs orgmode to mkgmap style file converter
 
 =head1 SYNOPSIS
 
-org-to-style --org-file=my-style.org --output-directory=/tmp/mkgamp-style
+org-to-style --org-file=my-style.org --output-directory=/tmp/mkgmap-style
 
 =head1 DESCRIPTION
 
