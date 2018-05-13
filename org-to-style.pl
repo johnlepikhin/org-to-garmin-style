@@ -32,6 +32,7 @@ my $doc = $orgp->parse_file( $org_file );
 mkdir $output_directory;
 
 my ($org_basedir) = $org_file =~ m{(.*)/};
+$org_basedir //= './';
 
 my ( %out, %used_ids );
 
