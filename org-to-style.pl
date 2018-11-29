@@ -10,16 +10,18 @@ use Carp;
 use Pod::Usage;
 use Getopt::Long;
 
-my ($org_file, $output_directory);
+my ( $org_file, $output_directory );
 
-GetOptions(q{org-file=s} => \$org_file,
-           q{output-directory=s} => \$output_directory);
+GetOptions(
+    q{org-file=s}         => \$org_file,
+    q{output-directory=s} => \$output_directory
+);
 
-if (!defined $org_file || !defined $output_directory) {
-    pod2usage(-verbose => 2);
+if ( !defined $org_file || !defined $output_directory ) {
+    pod2usage( -verbose => 2 );
 }
 
-my $codepage = 1251;
+my $codepage   = 1251;
 my $style_name = 'generated';
 
 binmode STDOUT, ':utf8';
@@ -27,10 +29,10 @@ binmode STDOUT, ':utf8';
 my $orgp = Org::Parser->new();
 
 # parse a file
-my $doc = $orgp->parse_file( $org_file );
+my $doc = $orgp->parse_file($org_file);
 
 my $style_directory = "$output_directory/styles/$style_name";
-foreach ($output_directory, "$output_directory/styles", $style_directory) {
+foreach ( $output_directory, "$output_directory/styles", $style_directory ) {
     mkdir $_;
 }
 
@@ -79,7 +81,7 @@ $doc->walk(
             if ( $el->isa('Org::Element::Link') ) {
                 my $link = $el->link();
                 if ( $link =~ m{\.xpm$} ) {
-                    if (my ($file) = $link =~ /^file:(.*)/ ) {
+                    if ( my ($file) = $link =~ m{^file:(.*)} ) {
                         $heading->{xpm} = "$org_basedir/$file";
                     }
                     else {
@@ -177,8 +179,8 @@ $doc->walk(
                 my $xpm = path($xpm_file)->slurp
                   // croak "Cannot read file: $xpm_file";
                 my $xpm_processed;
-                foreach ( split /\n/, $xpm ) {
-                    if (/^"([^"]+)/) {
+                foreach ( split m{\n}, $xpm ) {
+                    if (m{^"([^"]+)}) {
                         $xpm_processed .= "\"$1\"\n";
                     }
                 }
@@ -198,10 +200,10 @@ END
 
 close $fh;
 
-if (! chdir $output_directory) {
+if ( !chdir $output_directory ) {
     croak "Cannot chdir() to $output_directory";
 }
-system 'zip', '-qr9', "$output_directory/style.zip", 'styles';
+system 'zip', '-qbr9', "$output_directory/style.zip", 'styles';
 
 open $fh, ">", "$output_directory/mkgmap-args.txt";
 print $fh <<"END"
