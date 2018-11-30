@@ -22,7 +22,6 @@ if ( !defined $org_file || !defined $output_directory ) {
 }
 
 my $codepage   = 1251;
-my $style_name = 'generated';
 
 binmode STDOUT, ':utf8';
 
@@ -31,6 +30,14 @@ my $orgp = Org::Parser->new();
 # parse a file
 my $doc = $orgp->parse_file($org_file);
 
+my %props = %{ $doc->properties() };
+
+my $family_id = $props{FAMILY_ID} // croak "Cannot get FAMILY_ID from file header";
+my $product_id = $props{PRODUCT_ID} // 1;
+my $style_name = $props{STYLE_NAME} // 'generated';
+my $style_version = $props{STYLE_VERSION} // 1;
+my $style_summary = $props{STYLE_SUMMARY} // 'Automatically generated style';
+my $style_description = $props{STYLE_DESCRIPTION} // q{};
 my $style_directory = "$output_directory/styles/$style_name";
 foreach ( $output_directory, "$output_directory/styles", $style_directory ) {
     mkdir $_;
@@ -130,18 +137,19 @@ foreach ( values %out ) {
     close $_;
 }
 
-my %props = %{ $doc->properties() };
-
-my $fid = $props{FAMILY_ID} // croak "Cannot get FAMILY_ID from file header";
-
-# my $pid = $props{PRODUCT_ID} // 1;
-my $version = $props{VERSION} // 1;
-write_file( "$style_directory/version", "$version\n" );
+write_file( "$style_directory/version", "1\n" );
+write_file( "$style_directory/info", <<"END"
+version=$style_version
+summary=$style_summary
+description=$style_description
+END
+);
 
 open $fh, ">:encoding(cp$codepage)", "$output_directory/style.txt";
 print $fh <<"END"
 [_id]
-FID=$fid
+FID=$family_id
+ProductCode=$product_id
 CodePage=$codepage
 [end]
 
@@ -203,7 +211,10 @@ close $fh;
 if ( !chdir $output_directory ) {
     croak "Cannot chdir() to $output_directory";
 }
-system 'zip', '-qbr9', "$output_directory/style.zip", 'styles';
+bmy $rc = system 'zip', '-qr9', "$output_directory/style.zip", 'styles';
+if ($rc) {
+    print "ERROR: zip failed\n";
+}
 
 open $fh, ">", "$output_directory/mkgmap-args.txt";
 print $fh <<"END"
@@ -226,8 +237,8 @@ index
 nsis
 gmapsupp
 unicode
-family-id: $fid
-product-id: 1
+family-id: $family_id
+product-id: $product_id
 code-page: $codepage
 style-file: $output_directory/style.zip
 style: $style_name
