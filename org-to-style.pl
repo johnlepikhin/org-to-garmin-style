@@ -237,6 +237,7 @@ index
 nsis
 gmapsupp
 unicode
+family-id: $family_id
 code-page: $codepage
 style-file: $output_directory/style.zip
 style: $style_name
