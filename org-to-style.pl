@@ -164,7 +164,11 @@ $doc->walk(
             return;
         }
         my $order = $el->get_property( 'DRAW_ORDER', 1 ) // return;
+        my $type = $el->get_property( 'TYPE', 1 ) // return;
         my $id = $el->{id} // return;
+        if ($type ne 'polygon') {
+            return
+        }
 
         print $fh "Type=$id,$order\n";
     }
