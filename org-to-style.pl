@@ -215,7 +215,7 @@ close $fh;
 if ( !chdir $output_directory ) {
     croak "Cannot chdir() to $output_directory";
 }
-bmy $rc = system 'zip', '-qr9', "$output_directory/style.zip", 'styles';
+my $rc = system 'zip', '-qr9', "$output_directory/style.zip", 'styles';
 if ($rc) {
     print "ERROR: zip failed\n";
 }
