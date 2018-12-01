@@ -21,7 +21,7 @@ if ( !defined $org_file || !defined $output_directory ) {
     pod2usage( -verbose => 2 );
 }
 
-my $codepage   = 1251;
+my $codepage = 1251;
 
 binmode STDOUT, ':utf8';
 
@@ -32,9 +32,10 @@ my $doc = $orgp->parse_file($org_file);
 
 my %props = %{ $doc->properties() };
 
-my $family_id = $props{FAMILY_ID} // croak "Cannot get FAMILY_ID from file header";
-my $product_id = $props{PRODUCT_ID} // 1;
-my $style_name = $props{STYLE_NAME} // 'generated';
+my $family_id = $props{FAMILY_ID}
+  // croak "Cannot get FAMILY_ID from file header";
+my $product_id    = $props{PRODUCT_ID}    // 1;
+my $style_name    = $props{STYLE_NAME}    // 'generated';
 my $style_version = $props{STYLE_VERSION} // 1;
 my $style_summary = $props{STYLE_SUMMARY} // 'Automatically generated style';
 my $style_description = $props{STYLE_DESCRIPTION} // q{};
@@ -83,18 +84,42 @@ $doc->walk(
                 $used_ids{$garmin_id} = 1;
                 $heading->{id} = $garmin_id;
             }
+            return;
         }
-        elsif ( defined $heading ) {
-            if ( $el->isa('Org::Element::Link') ) {
-                my $link = $el->link();
-                if ( $link =~ m{\.xpm$} ) {
-                    if ( my ($file) = $link =~ m{^file:(.*)} ) {
-                        $heading->{xpm} = "$org_basedir/$file";
-                    }
-                    else {
-                        carp "Only file: links are supported for XPMs: $link";
-                    }
+
+        if ( !defined $heading ) {
+            return;
+        }
+
+        if ( $el->isa('Org::Element::Link') ) {
+            my $link = $el->link();
+            if ( $link =~ m{\.xpm$} ) {
+                if ( exists $heading->{xpm} ) {
+                    croak "XPM already defined for "
+                      . $heading->title->as_string();
                 }
+                if ( my ($file) = $link =~ m{^file:(.*)} ) {
+                    $file = "$org_basedir/$file";
+                    $heading->{xpm} = path($file)->slurp
+                      // croak "Cannot read file: $file";
+                }
+                else {
+                    carp "Only file:/ links are supported for XPMs: $link";
+                }
+            }
+            return;
+        }
+
+        if ( $el->isa('Org::Element::Block') ) {
+            if (   $el->name() eq 'SRC'
+                && defined $el->args()->[1]
+                && $el->args()->[1] eq 'xpm.c' )
+            {
+                if ( exists $heading->{xpm} ) {
+                    croak "XPM already defined for "
+                      . $heading->title->as_string();
+                }
+                $heading->{xpm} = $el->raw_content(), "\n";
             }
         }
     }
@@ -138,7 +163,8 @@ foreach ( values %out ) {
 }
 
 write_file( "$style_directory/version", "1\n" );
-write_file( "$style_directory/info", <<"END"
+write_file(
+    "$style_directory/info", <<"END"
 version=$style_version
 summary=$style_summary
 description=$style_description
@@ -164,10 +190,10 @@ $doc->walk(
             return;
         }
         my $order = $el->get_property( 'DRAW_ORDER', 1 ) // return;
-        my $type = $el->get_property( 'TYPE', 1 ) // return;
+        my $type  = $el->get_property( 'TYPE',       1 ) // return;
         my $id = $el->{id} // return;
-        if ($type ne 'polygon') {
-            return
+        if ( $type ne 'polygon' ) {
+            return;
         }
 
         print $fh "Type=$id,$order\n";
@@ -180,28 +206,24 @@ $doc->walk(
     sub {
         my ($el) = @_;
         if ( $el->isa('Org::Element::Headline') ) {
-            my $xpm_file = $el->{xpm};
             my $title    = $el->title->as_string();
             my $language = $el->get_property( 'LANGUAGE', 1 );
             my $type     = $el->get_property( 'TYPE', 1 );
 
-            if ( defined $type && defined $language && defined $xpm_file ) {
+            if ( defined $type && defined $language && defined $el->{xpm} ) {
                 my $id = $el->{id} // return;
 
-                my $xpm = path($xpm_file)->slurp
-                  // croak "Cannot read file: $xpm_file";
                 my $xpm_processed;
-                foreach ( split m{\n}, $xpm ) {
+                foreach ( split m{\n}, $el->{xpm} ) {
                     if (m{^"([^"]+)}) {
                         $xpm_processed .= "\"$1\"\n";
                     }
                 }
-                $xpm = $xpm_processed;
                 print $fh <<"END"
 [_$type]
 Type=$id
 String1=$language,$title
-Xpm=$xpm
+Xpm=$xpm_processed
 [end]
 
 END
