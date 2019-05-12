@@ -267,7 +267,6 @@ family-id: $family_id
 code-page: $codepage
 style-file: $output_directory/style.zip
 style: $style_name
-input-file: style.txt
 END
   ;
 
@@ -278,7 +277,7 @@ DONE. Typical next steps:
 
  1. mkdir /tmp/temp-dir && cd /tmp/temp-dir
  2. splitter.jar --num-tiles=4 --mapid=12345678 --keep-complete=false /path/to/map.osm
- 3. mkgmap -c $output_directory/mkgmap-args.txt --description='my map' *.pbf
+ 3. mkgmap -c $output_directory/mkgmap-args.txt --description='my map' *.pbf $output_directory/style.txt
 
 Or without splitting:
 
